@@ -69,6 +69,7 @@ const naiveDrops = (samples, options) => {
     if (before.length === 0) continue;
     const baseline = Math.max(...before);
     if (baseline < options.minimumBaseline) continue;
+    if (baseline <= value) continue;
     if (baseline - value < options.minimumAbsoluteDrop) continue;
     if (
       value / Math.max(baseline, Number.EPSILON)
@@ -110,6 +111,7 @@ const naiveSpikes = (samples, options) => {
     );
     if (before.length === 0) continue;
     const baseline = Math.min(...before);
+    if (value <= baseline) continue;
     if (value - baseline < options.minimumAbsoluteRise) continue;
     if (
       value
@@ -213,6 +215,40 @@ test("merges nearby candidates into one interval", () => {
     baseline: 1,
     recovery: 1,
   }]);
+});
+
+test("requires an actual direction change when thresholds allow zero", () => {
+  const flat = [
+    { timeMs: 0, value: 1 },
+    { timeMs: 10, value: 1 },
+    { timeMs: 20, value: 1 },
+  ];
+  const dropOptions = {
+    path: "value",
+    minimumBaseline: 0,
+    minimumAbsoluteDrop: 0,
+    minimumRelativeDrop: 0,
+    recoveryRatio: 1,
+  };
+  const spikeOptions = {
+    path: "value",
+    minimumAbsoluteRise: 0,
+    minimumRelativeRise: 1,
+    recoveryTolerance: 0,
+  };
+
+  assert.deepEqual(detectTransientDrops(flat, dropOptions), []);
+  assert.deepEqual(detectTransientSpikes(flat, spikeOptions), []);
+  assert.equal(detectTransientDrops([
+    flat[0],
+    { timeMs: 10, value: 0.99 },
+    flat[2],
+  ], dropOptions).length, 1);
+  assert.equal(detectTransientSpikes([
+    flat[0],
+    { timeMs: 10, value: 1.01 },
+    flat[2],
+  ], spikeOptions).length, 1);
 });
 
 test("starts surface absence checks only after the first paintable sample", () => {

@@ -208,8 +208,23 @@ const assertState = (state) => {
       "previousState.readySinceMs is outside the observed timeline",
     );
   }
-  if (state.degraded && !state.timedOut) {
-    throw new RangeError("a degraded previousState must be timed out");
+  if (
+    state.degraded
+    && !state.timedOut
+    && state.phase !== "degraded-reveal"
+  ) {
+    throw new RangeError(
+      "a degraded previousState outside degraded-reveal must be timed out",
+    );
+  }
+  if (
+    state.degraded
+    && !state.timedOut
+    && state.progress !== 1
+  ) {
+    throw new RangeError(
+      "an untimed degraded-reveal previousState must have complete progress",
+    );
   }
   if (
     state.phase === "idle"
@@ -249,7 +264,13 @@ const assertState = (state) => {
       "degraded-reveal previousState fields are inconsistent",
     );
   }
-  if (state.phase === "active" && state.progress !== 1) {
+  if (
+    state.phase === "active"
+    && (
+      state.progress !== 1
+      || (!state.degraded && state.readySinceMs === null)
+    )
+  ) {
     throw new RangeError("active previousState must have complete progress");
   }
 };
@@ -270,9 +291,9 @@ const normalizeObservation = (observation, previousState) => {
   ]) {
     assertBooleanField(observation[name], name);
   }
-  const epoch = observation.epoch
-    ?? previousState?.epoch
-    ?? 0;
+  const epoch = observation.epoch === undefined
+    ? previousState?.epoch ?? 0
+    : observation.epoch;
   assertEpoch(epoch);
   return {
     timeMs: observation.timeMs,
@@ -379,8 +400,13 @@ export const advanceHandoff = (previousState, observation, overrides = {}) => {
   state.timedOut = state.timedOut
     || elapsedMs >= options.revealTimeoutMs;
 
-  const canReveal = nextPresent && (stableReady || state.timedOut);
-  if (canReveal) {
+  const fallbacklessReveal = nextPresent
+    && !normalized.previousAvailable;
+  const canReveal = nextPresent
+    && (stableReady || state.timedOut || fallbacklessReveal);
+  if (fallbacklessReveal) {
+    state.progress = 1;
+  } else if (canReveal) {
     state.progress = options.revealDurationMs === 0
       ? 1
       : clamp01(
@@ -394,7 +420,8 @@ export const advanceHandoff = (previousState, observation, overrides = {}) => {
       stableReady
       || (options.allowDegradedRetirement && nextPresent && retirementTimedOut)
     );
-  state.degraded = state.timedOut && !stableReady;
+  state.degraded = !stableReady
+    && (state.timedOut || fallbacklessReveal || state.degraded);
   state.phase = canRetirePrevious
     ? "active"
     : state.progress > 0

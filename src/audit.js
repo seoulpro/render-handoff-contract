@@ -231,6 +231,7 @@ export const detectTransientDrops = (
     const baseline = baselines[index];
     if (baseline === null) continue;
     if (baseline < minimumBaseline) continue;
+    if (baseline <= value) continue;
     if (baseline - value < minimumAbsoluteDrop) continue;
     if (value / Math.max(baseline, Number.EPSILON) > 1 - minimumRelativeDrop) {
       continue;
@@ -303,6 +304,7 @@ export const detectTransientSpikes = (
     if (value === null) continue;
     const baseline = baselines[index];
     if (baseline === null) continue;
+    if (value <= baseline) continue;
     if (value - baseline < minimumAbsoluteRise) continue;
     if (value < Math.max(minimumAbsoluteRise, baseline * minimumRelativeRise)) {
       continue;

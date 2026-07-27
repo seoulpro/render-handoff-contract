@@ -95,19 +95,26 @@ Behavior, in order:
    active. The returned state is a fresh `idle` state for the epoch, and the
    policy is `{ nextOpacity: 0, retainPrevious: observation.previousAvailable,
    canRetirePrevious: false, qualityReady: false, timedOut: false, degraded:
-   false }`. This resets any progress from earlier frames.
+   false }`. This resets any progress from earlier frames and clears the timeline
+   timestamps (`startedAtMs`, `readySinceMs`, `lastFrameAtMs`). The cancellation
+   frame itself is still subject to backward-time rejection: with a prior frame on
+   record in the same epoch, its `timeMs` may not precede that frame. Once it has
+   returned the fresh idle state (clearing `lastFrameAtMs`), a later requested
+   frame — even in the same epoch — begins a fresh timeline and may use an earlier
+   finite `timeMs`.
 2. **Epoch change.** If the observation's epoch differs from `previousState`'s
    (or there is no previous state), the machine resets for the new epoch:
    `phase` becomes `holding`, `startedAtMs` and `lastFrameAtMs` are set to
    `timeMs`, and progress returns to `0`.
-3. **Active is terminal for the epoch.** Once a handoff reaches `active`, later
-   frames in the same epoch keep `phase: "active"`, only advancing
-   `lastFrameAtMs`. The policy holds at `nextOpacity: 1`, `retainPrevious:
-   false`, `canRetirePrevious: true`, and carries the completed handoff's
-   `timedOut` and `degraded` flags forward unchanged; `qualityReady` reports
-   whether that completion was non-degraded (`!degraded`) rather than measuring
-   the current frame. A late `failed` or absent `nextPresent` observation does
-   not undo a completed reveal. To start over, change the epoch.
+3. **Active is terminal for the epoch while requested.** Once a handoff reaches
+   `active`, later requested frames in the same epoch keep `phase: "active"`,
+   only advancing `lastFrameAtMs`. The policy holds at `nextOpacity: 1`,
+   `retainPrevious: false`, `canRetirePrevious: true`, and carries the completed
+   handoff's `timedOut` and `degraded` flags forward unchanged; `qualityReady`
+   reports whether that completion was non-degraded (`!degraded`) rather than
+   measuring the current frame. A late `failed` or absent `nextPresent`
+   observation does not undo a completed reveal. To start over, change the epoch
+   — or set `requested: false`, which resets to idle (item 1).
 4. **Reveal progress.** While requested and not yet active, the machine tracks
    readiness and advances the reveal. `qualityReady` requires `nextPresent`,
    `coverage >= coverageThreshold`, `loadProgress >= loadThreshold`, and not
@@ -115,19 +122,35 @@ Behavior, in order:
    considered stable. Reveal progress increases by
    `clampedFrameDelta / revealDurationMs` each frame — or jumps straight to `1`
    when `revealDurationMs` is `0` (immediate reveal). Frame deltas are clamped to
-   `maximumFrameDeltaMs` so a suspended tab cannot reveal in a single step.
+   `maximumFrameDeltaMs` so a suspended tab cannot reveal in a single step. Once
+   progress is above zero, a later readiness dip clears `readySinceMs` and pauses
+   further progress while preserving the monotonic progress already reached; the
+   phase stays `revealing` (unless timeout or degraded logic changes it). A later
+   ready frame starts a new stability interval, and the reveal resumes once
+   readiness is stable again.
 
-Timeouts and degraded reveal:
+Timeouts, immediate reveal, and degraded state:
 
-- The reveal is considered timed out once `timeMs - startedAtMs >=
-  revealTimeoutMs`. `timedOut` is sticky for the epoch. A timed-out handoff may
-  still reveal, but it is marked `degraded` unless readiness later becomes
-  stable.
-- By default a degraded handoff reveals the next representation but does **not**
-  retire the previous one (`canRetirePrevious` stays `false`, `retainPrevious`
-  stays `true` while a previous representation is available). This keeps a
-  fallback on screen when quality was never confirmed.
-- Set `allowDegradedRetirement: true` to permit retirement after
+- **Immediate reveal without a fallback.** When the incoming representation is
+  present (`nextPresent: true`) but no previous representation is available
+  (`previousAvailable: false`), `progress` is set to `1` at once rather than
+  returning a blank frame. Until readiness is stable this is a degraded reveal:
+  `degraded` is `true`, `canRetirePrevious` is `false`, and `timedOut` may still
+  be `false`. If a previous representation later becomes available, it is
+  retained until readiness is stable or an allowed degraded retirement.
+- **Reveal timeout.** The reveal is considered timed out once
+  `timeMs - startedAtMs >= revealTimeoutMs`. `timedOut` is sticky for the epoch.
+  A timed-out handoff may still reveal, but it is marked `degraded` unless
+  readiness later becomes stable.
+- **What `degraded` means.** `degraded` is `true` whenever the next
+  representation is exposed without stable readiness — whether from the reveal
+  timeout, the fallbackless reveal above, or a still-unstable prior degraded
+  frame. It does not on its own imply `timedOut`, and it clears only when
+  readiness becomes stable.
+- **Retirement while degraded.** By default a degraded handoff reveals the next
+  representation but does **not** retire the previous one (`canRetirePrevious`
+  stays `false`, `retainPrevious` stays `true` while a previous representation is
+  available). Set `allowDegradedRetirement: true` to permit retirement after
   `retirementTimeoutMs` elapses (with `nextPresent` still true) even without
   stable readiness. Enabling this requires `retirementTimeoutMs >=
   revealTimeoutMs`.
@@ -183,8 +206,8 @@ An observation describes one measured frame.
 
 | Field               | Type              | Default            | Notes |
 | ------------------- | ----------------- | ------------------ | ----- |
-| `timeMs`            | finite number     | — (required)       | Frame timestamp. Must not move backward within one epoch. |
-| `epoch`             | string or finite number | previous epoch, else `0` | Identifies the ownership generation. |
+| `timeMs`            | finite number     | — (required)       | Frame timestamp. Must not move backward within one epoch while a prior frame is on record (including a `requested: false` cancellation frame); cleared once a cancellation resets to idle. |
+| `epoch`             | string or finite number | previous epoch, else `0`, when omitted | Identifies the ownership generation. Inferred only when `undefined`. |
 | `requested`         | boolean           | `false`            | Whether a handoff is active this frame. |
 | `previousAvailable` | boolean           | `false`            | Whether a previous representation is still on screen. |
 | `nextPresent`       | boolean           | `false`            | Whether the incoming representation exists. |
@@ -194,8 +217,9 @@ An observation describes one measured frame.
 
 Additional own keys are preserved by `runHandoffTimeline` but ignored by the
 policy. Boolean fields must be actual booleans (not `0`/`1`/`"yes"`); numeric
-fields must be finite; `epoch` may not be an object. Each violation throws a
-`TypeError`.
+fields must be finite. Only an omitted (`undefined`) `epoch` is inferred; an
+explicit `epoch: null` (or an object) is rejected — the accepted values are a
+string or a finite number. Each violation throws a `TypeError`.
 
 ### Options and defaults
 
@@ -228,7 +252,7 @@ immutable; construct it only via `createHandoffState` or the return of
 | `lastFrameAtMs` | number or `null`         | Timestamp of the most recent observed frame. |
 | `progress`      | number in `[0, 1]`       | Reveal progress; equals `policy.nextOpacity`. |
 | `timedOut`      | boolean                  | Sticky once the reveal timeout is passed. |
-| `degraded`      | boolean                  | Timed out without stable readiness. A degraded state is always timed out. |
+| `degraded`      | boolean                  | The next representation is exposed without stable readiness — from the reveal timeout or from a fallbackless immediate reveal. Not necessarily timed out. |
 
 ### Policy fields
 
@@ -251,7 +275,7 @@ immutable; construct it only via `createHandoffState` or the return of
 | `holding`         | Requested, revealing not started; progress `0`. |
 | `revealing`       | Progress is strictly between `0` and `1`, not degraded. |
 | `degraded-reveal` | Progress above `0` while degraded. |
-| `active`          | Reveal complete and previous retireable. Terminal for the epoch. |
+| `active`          | Reveal complete and previous retireable. Terminal for the epoch while the request stays active; cancelling (`requested: false`) resets to idle. |
 
 ---
 
@@ -287,7 +311,9 @@ maximum over the following `recoveryMs` as the recovery. A candidate is reported
 when the baseline is at least `minimumBaseline`, the absolute drop is at least
 `minimumAbsoluteDrop`, the relative drop is at least `minimumRelativeDrop`, and
 the recovery reaches at least `baseline * recoveryRatio`. Adjacent candidates
-within `mergeWindowMs` are merged into one event.
+within `mergeWindowMs` are merged into one event. Zero thresholds are allowed,
+but a real drop is still required: a candidate must have `baseline > value`, so a
+flat value never registers.
 
 | Option                | Default | Constraint |
 | --------------------- | ------- | ---------- |
@@ -327,7 +353,9 @@ baseline is the minimum over the preceding `lookbackMs`; the recovery is the
 minimum over the following `recoveryMs`. A candidate is reported when the rise is
 at least `minimumAbsoluteRise`, the value reaches at least `max(minimumAbsoluteRise,
 baseline * minimumRelativeRise)`, and the recovery is no more than `baseline +
-recoveryTolerance`. Merging works as for drops.
+recoveryTolerance`. Merging works as for drops. Zero thresholds are allowed, but a
+real rise is still required: a candidate must have `value > baseline`, so a flat
+value never registers.
 
 | Option                | Default | Constraint |
 | --------------------- | ------- | ---------- |
@@ -479,8 +507,14 @@ The library validates inputs instead of coercing them, and throws synchronously:
 
 A `previousState` produced by `createHandoffState` or a prior `advanceHandoff`
 call always validates. Hand-built states are checked against every phase
-invariant (for example, a `holding` state must have `progress: 0`, an `active`
-state must have `progress: 1`, and a `degraded` state must be `timedOut`).
+invariant. For example, a `holding` state must have `progress: 0`; a `revealing`
+state must have `0 < progress < 1` and not be `degraded` (a null `readySinceMs`
+is allowed, since a reveal may be paused after a readiness dip); an `active` state
+must have `progress: 1`, and unless it is `degraded` it requires a `readySinceMs`;
+and a `degraded` state must be `timedOut` unless its phase is `degraded-reveal`.
+The only untimed degraded state is that fallbackless `degraded-reveal`, and it
+must have complete reveal progress (`progress: 1`); a hand-built untimed degraded
+state with partial progress is rejected.
 
 ## Complexity
 

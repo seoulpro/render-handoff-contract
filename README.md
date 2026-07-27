@@ -88,7 +88,12 @@ function onFrame() {
 ```
 
 `coverage` and `loadProgress` are clamped to `[0, 1]`; boolean fields must be
-booleans; `timeMs` must be finite and may not move backward within one epoch.
+booleans; `timeMs` must be finite and may not move backward within one epoch
+while a prior frame's timestamp is on record — including a `requested: false`
+cancellation frame, which is still checked against the last requested frame. That
+cancellation returns a fresh idle state and clears the recorded timestamp, so a
+later requested frame begins a new timeline and may use an earlier finite
+`timeMs`.
 Unknown options and out-of-range thresholds are rejected rather than silently
 corrected.
 
@@ -104,18 +109,35 @@ revealed and confirmed:
   on quality;
 - reveal opacity increases monotonically within an epoch, driven by clamped
   wall-clock deltas rather than frame counts;
+- if readiness dips after the reveal has begun, further progress pauses while
+  the opacity reached so far is preserved, and it resumes once readiness is
+  stable again;
 - the previous representation is retired only once the reveal reaches full
   opacity with stable readiness.
 
 Setting `revealDurationMs: 0` makes the reveal immediate — opacity jumps to `1`
 in the frame the reveal begins.
 
+### Immediate reveal without a fallback
+
+When a handoff is requested with the incoming representation present
+(`nextPresent: true`) but no previous representation available
+(`previousAvailable: false`), there is nothing to hold behind, so the contract
+sets `nextOpacity` to `1` immediately rather than returning a blank frame. Until
+readiness becomes stable this is a **degraded reveal**: `degraded` is `true`,
+`canRetirePrevious` is `false`, and `timedOut` may still be `false`. If a
+previous representation later becomes available, it is retained until readiness
+is stable (or an allowed degraded retirement).
+
 ### Degraded reveal
 
-If readiness never stabilizes, the reveal still happens after `revealTimeoutMs`
-so the user is not left staring at a stalled placeholder — but the result is
-marked **degraded**. A degraded reveal shows the incoming representation while
-**keeping the previous one on screen**, because quality was never confirmed.
+`degraded` means the incoming representation is exposed without confirmed stable
+quality. Two situations cause it: readiness never stabilizing before
+`revealTimeoutMs` elapses (so the user is not left staring at a stalled
+placeholder), or the absence of a fallback to hold behind (the immediate reveal
+above). It does not by itself imply `timedOut`. While a previous representation
+is available, a degraded reveal keeps it on screen because quality was never
+confirmed.
 
 ### Opt-in degraded retirement
 
@@ -142,13 +164,19 @@ returns to zero and a new handoff begins. This is how you cancel an in-flight
 handoff when the target changes — start observing with a new epoch and the old
 progress is discarded.
 
+Only an omitted (`undefined`) `epoch` is inferred — from the previous state, or
+`0` when there is none. An explicit `epoch: null` is rejected; the accepted
+values are a string or a finite number.
+
 ### Active is terminal for the epoch
 
 Once a handoff completes it enters the `active` phase, which is terminal **for
-that epoch**. Later frames in the same epoch stay `active` and keep the incoming
-representation fully revealed; a late `failed` or a momentarily absent
-`nextPresent` does not unwind a completed reveal. To hand off again, move to a
-new epoch.
+that epoch while the request stays active**. Later requested frames in the same
+epoch stay `active` and keep the incoming representation fully revealed; a late
+`failed` or a momentarily absent `nextPresent` does not unwind a completed
+reveal. To hand off again, move to a new epoch. Setting `requested: false`
+returns a fresh idle state and clears the timeline timestamps; a later request —
+even in the same epoch — begins a fresh handoff timeline.
 
 ### Running a whole timeline
 

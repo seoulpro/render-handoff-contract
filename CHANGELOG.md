@@ -15,9 +15,13 @@ Initial development release. Not yet published to npm.
   `runHandoffTimeline` turn per-frame observations into a reveal/retire policy.
   The state machine covers the normal handoff, a degraded reveal after a reveal
   timeout, opt-in degraded retirement (`allowDegradedRetirement`), ownership
-  epochs with reset on epoch change, and `active` as a terminal phase for the
-  epoch. Reveal progress is monotonic within an epoch and driven by clamped
-  wall-clock frame deltas.
+  epochs with reset on epoch change, and `active` as a terminal phase while the
+  request stays active — cancelling (`requested: false`) resets to idle and the
+  next request starts a fresh timeline. When no previous representation is
+  available but the next is present, the next representation is shown at full
+  opacity immediately and stays `degraded` until readiness stabilizes. Reveal
+  progress is monotonic within an epoch and driven by clamped wall-clock frame
+  deltas.
 - **Timeline audit.** `detectTransientDrops`, `detectTransientSpikes`,
   `detectSurfaceAbsenceAfterFirstPaint`, `isDomSurfacePaintable`, and the
   declarative `auditTimeline` runner flag transient continuity failures on a
@@ -31,3 +35,16 @@ Initial development release. Not yet published to npm.
   `./audit` subpaths. The package is ESM-only and has no runtime dependencies.
 - **Package checks.** Runtime tests, coverage thresholds, type-level tests,
   `publint`, and a packed-tarball install/import smoke test.
+
+### Fixed
+
+- An explicit `epoch: null` is now rejected; only an omitted (`undefined`) epoch
+  is inferred (from the previous state, or `0` when there is none).
+- Zero-valued drop and spike thresholds no longer classify a flat metric as an
+  event; a real direction change is required (`baseline > value` for a drop,
+  `value > baseline` for a spike).
+- Prior-state validation now requires `readySinceMs` for a non-degraded `active`
+  state, and accepts an untimed degraded state only as a complete fallbackless
+  `degraded-reveal` (`progress: 1`); a partial untimed degraded reveal is
+  rejected. A `revealing` state may have a null `readySinceMs`, since a reveal
+  can be paused after a readiness dip.
