@@ -32,11 +32,20 @@ implementation, or animation loop.
 - **No runtime dependencies.**
 - **TypeScript declarations included** for every entry point.
 
-## Status and getting started
+## Installation
 
-This package is not published to npm yet, so `npm install
-render-handoff-contract` does not resolve at the moment. You can run and inspect
-it from a checkout today:
+```sh
+npm install render-handoff-contract
+```
+
+The code samples below import from the package name `render-handoff-contract`,
+which is the normal consumer API. The runnable example in the repository imports
+from `./src/index.js` (and the `./src/handoff.js` / `./src/audit.js` files)
+instead, because it runs against the source in place.
+
+### Local development
+
+To work on the package from a checkout:
 
 ```sh
 # from the repository root
@@ -45,15 +54,8 @@ npm run example    # runs examples/simulate.mjs
 npm run check      # lint, typecheck, tests with coverage, example, package checks
 ```
 
-The runnable example lives at [`examples/simulate.mjs`](./examples/simulate.mjs)
-and imports directly from `./src`. To try the API from another local project
-before publication, install the checkout by path
-(`npm install /path/to/render-handoff-contract`) or use `npm link`.
-
-The code samples below import from the package name `render-handoff-contract`,
-which is how they will read once the package is published. From a checkout,
-import from `./src/index.js` (or `./src/handoff.js` / `./src/audit.js`) instead,
-as the example does.
+The runnable example lives at
+[`examples/simulate.mjs`](./examples/simulate.mjs).
 
 ## The handoff contract
 
