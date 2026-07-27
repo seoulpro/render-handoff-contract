@@ -15,15 +15,19 @@ const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
 const run = (command, args, cwd) => {
+  const environment = {
+    ...process.env,
+    NO_UPDATE_NOTIFIER: "1",
+    npm_config_audit: "false",
+    npm_config_fund: "false",
+  };
+  delete environment.npm_config_dry_run;
+  delete environment.NPM_CONFIG_DRY_RUN;
+
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      NO_UPDATE_NOTIFIER: "1",
-      npm_config_audit: "false",
-      npm_config_fund: "false",
-    },
+    env: environment,
   });
   if (result.status !== 0) {
     throw new Error(

@@ -46,7 +46,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "example": "node examples/simulate.mjs",
     "package:lint": "publint",
-    "package:types": "attw --pack . --profile esm-only --no-summary --format table --no-emoji --no-color",
+    "package:types": "node scripts/check-package-types.mjs",
     "package:smoke": "node scripts/verify-package.mjs",
     "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run example && npm run package:lint && npm run package:types && npm run package:smoke",
     "prepublishOnly": "npm run check"
