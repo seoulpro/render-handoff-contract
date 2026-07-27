@@ -1,0 +1,53 @@
+name: Feature request
+description: Propose a renderer-neutral contract or audit capability.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This library consumes observations and returns policy or audit findings.
+        It does not sample frames, read the DOM, capture screenshots, or query
+        the GPU or network. Proposals should keep that boundary: describe the
+        observation or sample data available, not a specific rendering engine.
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: >-
+        The handoff or audit scenario this addresses, described in terms of
+        observations and metrics rather than a particular renderer.
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What is hard or impossible with the current contract or audit, and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: >-
+        The new field, phase, option, rule kind, or function you have in mind,
+        and how it would behave with example inputs and outputs.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you weighed, including doing this in an adapter outside the core.
+    validations:
+      required: false
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and safety
+      description: >-
+        Impact on existing behavior and defaults, and any effect on the
+        retirement safeguards or validation. Note whether it is additive or a
+        breaking change.
+    validations:
+      required: true

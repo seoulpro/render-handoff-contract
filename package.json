@@ -1,0 +1,66 @@
+{
+  "name": "render-handoff-contract",
+  "version": "0.1.0",
+  "description": "Engine-neutral policies and timeline audits for visually continuous renderer handoffs.",
+  "author": "seoulpro <lim@limsumin.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/seoulpro/render-handoff-contract#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seoulpro/render-handoff-contract.git"
+  },
+  "bugs": {
+    "url": "https://github.com/seoulpro/render-handoff-contract/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "types": "./src/index.d.ts",
+  "files": [
+    "src",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./handoff": {
+      "types": "./src/handoff.d.ts",
+      "import": "./src/handoff.js"
+    },
+    "./audit": {
+      "types": "./src/audit.d.ts",
+      "import": "./src/audit.js"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=95 --test-coverage-branches=90 --test-coverage-functions=100",
+    "lint": "node --check src/*.js test/*.js scripts/*.mjs examples/*.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "example": "node examples/simulate.mjs",
+    "package:lint": "publint",
+    "package:types": "attw --pack . --profile esm-only --no-summary --format table --no-emoji --no-color",
+    "package:smoke": "node scripts/verify-package.mjs",
+    "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run example && npm run package:lint && npm run package:types && npm run package:smoke",
+    "prepublishOnly": "npm run check"
+  },
+  "keywords": [
+    "rendering",
+    "continuity",
+    "handoff",
+    "state-machine",
+    "timeline-audit"
+  ],
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "publint": "0.3.22",
+    "typescript": "7.0.2"
+  }
+}

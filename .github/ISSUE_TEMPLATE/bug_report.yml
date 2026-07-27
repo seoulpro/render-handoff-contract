@@ -1,0 +1,77 @@
+name: Bug report
+description: Report incorrect policy, audit results, or validation behavior.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report.
+
+        **Do not report security vulnerabilities here, and do not paste private
+        or production telemetry.** For anything that needs a private reproducer,
+        follow the process in the repository's `SECURITY.md`.
+  - type: input
+    id: version
+    attributes:
+      label: Version or source revision
+      description: Package version, or the commit/branch you are running from a checkout.
+      placeholder: "0.1.0, or commit abc1234"
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      description: Output of `node --version`. Node.js 22 or newer is required.
+      placeholder: "v22.11.0"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: Operating system and architecture.
+      placeholder: "macOS 15 (arm64)"
+    validations:
+      required: true
+  - type: textarea
+    id: timeline
+    attributes:
+      label: Smallest observation or sample timeline
+      description: >-
+        The minimal array of observations (handoff) or samples (audit) that
+        reproduces the problem. Keep timestamps explicit.
+      render: js
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options or rules
+      description: The handoff options, or the audit rules, used with the timeline above.
+      render: js
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What policy, events, or validation result you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened, including any error message or thrown type.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: >-
+        Exact steps or a short script that reproduces the behavior, ideally
+        runnable with `node`.
+    validations:
+      required: true

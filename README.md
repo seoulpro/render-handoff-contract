@@ -1,0 +1,226 @@
+# render-handoff-contract
+
+Engine-neutral policies and timeline audits for visually continuous renderer
+handoffs.
+
+Applications routinely replace one asynchronously produced representation with
+another: a placeholder with real content, a low-detail view with a high-detail
+view, a server-rendered frame with a local canvas, one rendering engine with
+another. A `loaded === true` check is not enough to avoid a visible seam.
+Content can be present while screen coverage is incomplete, load progress can
+briefly bounce, and a single blank frame can slip past a final screenshot
+assertion.
+
+This package separates that coordination from the rendering engine. It does two
+things:
+
+- a **handoff contract** — feed it per-frame observations and it returns a
+  policy (how opaque the incoming representation should be, whether to keep the
+  previous one, whether the previous one can be retired);
+- a **timeline audit** — give it a recorded timeline and it flags transient
+  continuity failures such as a coverage drop that recovered or a placeholder
+  that flashed.
+
+It consumes observations you collect. It does not inspect pixels, the DOM, GPU
+state, or the network, and it assumes no particular renderer, scene graph, fetch
+implementation, or animation loop.
+
+## Requirements
+
+- **Node.js 22 or newer.**
+- **ESM only** — use `import`, not `require`.
+- **No runtime dependencies.**
+- **TypeScript declarations included** for every entry point.
+
+## Status and getting started
+
+This package is not published to npm yet, so `npm install
+render-handoff-contract` does not resolve at the moment. You can run and inspect
+it from a checkout today:
+
+```sh
+# from the repository root
+npm install        # installs devDependencies only (there are no runtime deps)
+npm run example    # runs examples/simulate.mjs
+npm run check      # lint, typecheck, tests with coverage, example, package checks
+```
+
+The runnable example lives at [`examples/simulate.mjs`](./examples/simulate.mjs)
+and imports directly from `./src`. To try the API from another local project
+before publication, install the checkout by path
+(`npm install /path/to/render-handoff-contract`) or use `npm link`.
+
+The code samples below import from the package name `render-handoff-contract`,
+which is how they will read once the package is published. From a checkout,
+import from `./src/index.js` (or `./src/handoff.js` / `./src/audit.js`) instead,
+as the example does.
+
+## The handoff contract
+
+`advanceHandoff` takes the previous state and one observation and returns the
+next state plus a policy for the current frame. Thread the returned `state` back
+in on the following frame.
+
+```js
+import {
+  advanceHandoff,
+  createHandoffState,
+} from "render-handoff-contract/handoff";
+
+let state = createHandoffState({ epoch: 1 });
+
+function onFrame() {
+  const result = advanceHandoff(state, {
+    timeMs: performance.now(),
+    epoch: 1,
+    requested: true,
+    previousAvailable: true,
+    nextPresent: true,
+    coverage: 0.99,
+    loadProgress: 1,
+  });
+  state = result.state;
+
+  setNextOpacity(result.policy.nextOpacity);
+  setPreviousVisible(result.policy.retainPrevious);
+  if (result.policy.canRetirePrevious) disposePrevious();
+}
+```
+
+`coverage` and `loadProgress` are clamped to `[0, 1]`; boolean fields must be
+booleans; `timeMs` must be finite and may not move backward within one epoch.
+Unknown options and out-of-range thresholds are rejected rather than silently
+corrected.
+
+### The normal handoff
+
+In the default policy the incoming representation is revealed only after quality
+holds steady, and the previous representation stays until the new one is fully
+revealed and confirmed:
+
+- readiness requires `nextPresent`, `coverage >= coverageThreshold`,
+  `loadProgress >= loadThreshold`, and no `failed` flag;
+- readiness must hold continuously for `stableForMs` before the reveal advances
+  on quality;
+- reveal opacity increases monotonically within an epoch, driven by clamped
+  wall-clock deltas rather than frame counts;
+- the previous representation is retired only once the reveal reaches full
+  opacity with stable readiness.
+
+Setting `revealDurationMs: 0` makes the reveal immediate — opacity jumps to `1`
+in the frame the reveal begins.
+
+### Degraded reveal
+
+If readiness never stabilizes, the reveal still happens after `revealTimeoutMs`
+so the user is not left staring at a stalled placeholder — but the result is
+marked **degraded**. A degraded reveal shows the incoming representation while
+**keeping the previous one on screen**, because quality was never confirmed.
+
+### Opt-in degraded retirement
+
+By default a degraded handoff never retires the previous representation. If your
+application would rather drop the fallback after a longer timeout, opt in:
+
+```js
+advanceHandoff(state, observation, {
+  allowDegradedRetirement: true,
+  revealTimeoutMs: 2500,
+  retirementTimeoutMs: 8000, // must be >= revealTimeoutMs
+});
+```
+
+With this enabled, once `retirementTimeoutMs` elapses (and the incoming
+representation is present), the previous one may be retired even without stable
+readiness. Enabling it requires `retirementTimeoutMs >= revealTimeoutMs`.
+
+### Ownership epochs
+
+An `epoch` (a string or a finite number) identifies the current handoff
+generation. When the observed epoch changes, the machine resets: progress
+returns to zero and a new handoff begins. This is how you cancel an in-flight
+handoff when the target changes — start observing with a new epoch and the old
+progress is discarded.
+
+### Active is terminal for the epoch
+
+Once a handoff completes it enters the `active` phase, which is terminal **for
+that epoch**. Later frames in the same epoch stay `active` and keep the incoming
+representation fully revealed; a late `failed` or a momentarily absent
+`nextPresent` does not unwind a completed reveal. To hand off again, move to a
+new epoch.
+
+### Running a whole timeline
+
+`runHandoffTimeline` folds the contract over an array of observations, threading
+state for you, and returns each observation merged with its policy and phase —
+convenient for tests, offline analysis, or feeding straight into the audit.
+
+```js
+import { runHandoffTimeline } from "render-handoff-contract/handoff";
+
+const frames = runHandoffTimeline(observations, { revealDurationMs: 300 });
+// each frame: { ...observation, nextOpacity, retainPrevious,
+//   canRetirePrevious, qualityReady, timedOut, degraded, phase }
+```
+
+Defaults and every field are documented in [docs/API.md](./docs/API.md).
+
+## Timeline auditing
+
+The audit inspects a recorded timeline after the fact and reports transient
+continuity failures. It reads metrics you recorded — it does not decide what
+"coverage" or "placeholder" means, and it is not a pixel-diff engine.
+
+```js
+import { auditTimeline } from "render-handoff-contract/audit";
+
+const report = auditTimeline(samples, [
+  { id: "surface-coverage", kind: "drop", path: "metrics.coverage" },
+  { id: "placeholder-flash", kind: "spike", path: "metrics.placeholderRatio" },
+  { id: "canvas-disappeared", kind: "surface-absence", path: "dom.outputCanvas" },
+]);
+```
+
+Three rule kinds are available:
+
+- `drop` — a metric that fell from a recent high and then recovered;
+- `spike` — a metric that rose sharply from a recent low and then settled;
+- `surface-absence` — a surface that stopped being paintable after it had first
+  appeared.
+
+Samples must have finite, non-decreasing own `timeMs` values. Metric paths are
+dot-delimited own-property paths: empty segments and the prototype-control names
+`__proto__`, `constructor`, and `prototype` are rejected. A rule's top-level
+`path` is authoritative — a `path` inside `options` cannot redirect it. Rule ids
+must be non-blank and unique.
+
+The `surface-absence` kind uses `isDomSurfacePaintable` by default, which treats
+a surface as not paintable when it is hidden, collapsed, disconnected,
+zero-sized, or nearly transparent, reading own numeric properties only. You can
+supply your own `isPaintable` predicate.
+
+## What this library does not do
+
+- It does not sample frames, read the DOM, capture screenshots, query the GPU,
+  or watch the network. You collect observations; it returns decisions.
+- It does not know which of your metrics describe visual quality — thresholds
+  and metric paths are yours to choose.
+- The audit works from the samples you record; its findings are only as good as
+  that telemetry. Supply samples in chronological order, and bound the timeline
+  length before auditing data from an untrusted source.
+
+The API is intentionally small and may still change during the `0.x` series as
+adapters exercise it.
+
+## Documentation
+
+- [docs/API.md](./docs/API.md) — every export, field, option, default, event,
+  and guarantee.
+- [CHANGELOG.md](./CHANGELOG.md) — release notes.
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — development and test expectations.
+- [SECURITY.md](./SECURITY.md) — how to report a vulnerability.
+
+## License
+
+[MIT](./LICENSE)
