@@ -28,13 +28,17 @@ public spaces.
 
 ## Reporting
 
-If you experience or witness unacceptable behavior, report it to the
-maintainers. If no private conduct channel is listed, open an issue that says
-only that you need to raise a conduct concern privately and asks for a private
-channel — do not include sensitive details in the public issue. Security
-vulnerabilities should instead follow [SECURITY.md](./SECURITY.md).
+Report conduct concerns privately by email to
+[lim@limsumin.com](mailto:lim@limsumin.com). Do not open a public issue for a
+conduct report, and do not include details about an incident in any public issue
+or pull request.
 
-Reports will be reviewed and handled as promptly as the maintainers are able.
+Conduct reports are separate from security reports. A security vulnerability
+should follow the private process in [SECURITY.md](./SECURITY.md), not this
+channel.
+
+Reports will be reviewed and handled as fairly and discreetly as the maintainers
+are able.
 
 ## Enforcement
 
@@ -46,5 +50,10 @@ participants.
 
 ## Attribution
 
-This code of conduct is adapted from common open-source community guidelines,
-including the spirit of the Contributor Covenant.
+This Code of Conduct is a project-specific adaptation of the
+[Contributor Covenant, version 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct.html),
+which is distributed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). It condenses and
+rewrites parts of that document for this project. This licensing applies to the
+conduct document only and is separate from the [MIT License](./LICENSE) that
+covers the software.

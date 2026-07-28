@@ -1,1 +1,8 @@
 blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/seoulpro/render-handoff-contract/security/policy
+    about: >-
+      Review the security policy and report vulnerabilities privately. Do not
+      open a public issue and do not include vulnerability details in any public
+      issue.

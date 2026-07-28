@@ -15,16 +15,13 @@ the default branch.
 
 ## Reporting a vulnerability
 
-Please report privately rather than in a public issue when a report needs a
-reproducer.
+When the repository provides GitHub private vulnerability reporting, use it —
+open a private report from the repository's **Security** tab (**Report a
+vulnerability**). Otherwise, email [lim@limsumin.com](mailto:lim@limsumin.com).
+Either way, the report stays confidential while it is triaged.
 
-- **Preferred (once available):** use GitHub's private vulnerability reporting on
-  the repository (the **Report a vulnerability** button under the repository's
-  *Security* tab). This keeps the reproducer confidential while it is triaged.
-- **Fallback:** if private reporting is not enabled on the repository yet, open a
-  regular issue that states only that you have found a security problem and asks
-  for a private channel — **do not include the reproducer or exploit details in
-  the public issue.**
+Do not open a public issue for a vulnerability, and do not include vulnerability
+details, reproducers, or exploit steps in any public issue or pull request.
 
 In scope are crafted observations or audit rules that cause, for example:
 
