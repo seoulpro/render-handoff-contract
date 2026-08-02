@@ -251,6 +251,17 @@ adapters exercise it.
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — development and test expectations.
 - [SECURITY.md](./SECURITY.md) — how to report a vulnerability.
 
+## Related projects
+
+- [playwright-render-contract](https://github.com/seoulpro/playwright-render-contract) —
+  readiness and structure checks alongside Playwright screenshots.
+- [atomic-quadtree-cut](https://github.com/seoulpro/atomic-quadtree-cut) — coherent
+  streamed refinement, with the same no-partial-replacement rule.
+- [tileset-scope-versioner](https://github.com/seoulpro/tileset-scope-versioner) — cache
+  versions for nested tilesets whose swaps must stay visually coherent.
+- [stable-marker-layout](https://github.com/seoulpro/stable-marker-layout) —
+  projection-agnostic placement for annotations that keep moving.
+
 ## License
 
 [MIT](./LICENSE)
