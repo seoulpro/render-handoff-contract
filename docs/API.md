@@ -10,6 +10,7 @@ caller supplies observations; the library returns decisions and findings.
 - [Handoff contract](#handoff-contract)
   - [`createHandoffState`](#createhandoffstate)
   - [`advanceHandoff`](#advancehandoff)
+  - [`explainHandoff`](#explainhandoff)
   - [`runHandoffTimeline`](#runhandofftimeline)
   - [Observation fields](#observation-fields)
   - [Options and defaults](#options-and-defaults)
@@ -33,8 +34,8 @@ The root entry re-exports everything. Two subpaths let you pull in only the
 handoff contract or only the audit:
 
 ```js
-import { advanceHandoff, auditTimeline } from "render-handoff-contract";
-import { advanceHandoff } from "render-handoff-contract/handoff";
+import { advanceHandoff, auditTimeline, explainHandoff } from "render-handoff-contract";
+import { advanceHandoff, explainHandoff } from "render-handoff-contract/handoff";
 import { auditTimeline } from "render-handoff-contract/audit";
 ```
 
@@ -175,6 +176,43 @@ setNextOpacity(policy.nextOpacity);
 setPreviousVisible(policy.retainPrevious);
 if (policy.canRetirePrevious) disposePrevious();
 ```
+
+### `explainHandoff`
+
+```ts
+explainHandoff(result: HandoffResult): {
+  reason: HandoffReason;
+  summary: string;
+}
+```
+
+Maps the result of `advanceHandoff` to a stable machine-readable reason and a
+short display summary. It is useful for traces, dashboards, support telemetry,
+and assertions that need to explain *why* a handoff held, revealed, paused, or
+retired without coupling to renderer internals.
+
+```js
+const result = advanceHandoff(state, observation);
+const explanation = explainHandoff(result);
+
+recordHandoffDecision(explanation.reason, explanation.summary);
+```
+
+The reason is one of:
+
+| Reason | Meaning |
+| ------ | ------- |
+| `not-requested` | No handoff is active. |
+| `holding-for-quality` | The previous representation is held while readiness stabilizes. |
+| `revealing` | A quality-confirmed reveal is progressing. |
+| `revealing-paused` | Readiness dipped after progress began, so progress is held. |
+| `degraded-after-timeout` | Reveal proceeds after the reveal timeout without confirmed quality. |
+| `degraded-no-fallback` | Reveal proceeds because no previous representation exists. |
+| `retired-degraded` | The previous representation was retired without confirmed quality. |
+| `retired-stable` | The next representation reached stable quality and the handoff completed. |
+
+The function reads but does not mutate the supplied result. Use `reason` as the
+stable identifier; `summary` is human-readable presentation text.
 
 ### `runHandoffTimeline`
 

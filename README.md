@@ -67,6 +67,7 @@ in on the following frame.
 import {
   advanceHandoff,
   createHandoffState,
+  explainHandoff,
 } from "render-handoff-contract/handoff";
 
 let state = createHandoffState({ epoch: 1 });
@@ -82,6 +83,9 @@ function onFrame() {
     loadProgress: 1,
   });
   state = result.state;
+
+  const explanation = explainHandoff(result);
+  recordHandoffDecision(explanation.reason, explanation.summary);
 
   setNextOpacity(result.policy.nextOpacity);
   setPreviousVisible(result.policy.retainPrevious);
@@ -193,6 +197,20 @@ const frames = runHandoffTimeline(observations, { revealDurationMs: 300 });
 // each frame: { ...observation, nextOpacity, retainPrevious,
 //   canRetirePrevious, qualityReady, timedOut, degraded, phase }
 ```
+
+### Explaining decisions
+
+`explainHandoff` turns an `advanceHandoff` result into a stable reason code and
+a short human-readable summary. This keeps observability independent of a
+renderer and avoids dashboards having to reverse-engineer the state machine.
+
+```js
+const { reason, summary } = explainHandoff(result);
+// reason: "holding-for-quality", "revealing", "retired-stable", ...
+```
+
+Reason codes are intended for logs, metrics dimensions, and deterministic
+tests. Summaries are concise display text; do not use them as identifiers.
 
 Defaults and every field are documented in [docs/API.md](./docs/API.md).
 

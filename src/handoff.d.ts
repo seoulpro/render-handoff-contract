@@ -59,6 +59,21 @@ export interface HandoffResult {
   readonly policy: HandoffPolicy;
 }
 
+export type HandoffReason =
+  | "not-requested"
+  | "holding-for-quality"
+  | "revealing"
+  | "revealing-paused"
+  | "degraded-after-timeout"
+  | "degraded-no-fallback"
+  | "retired-degraded"
+  | "retired-stable";
+
+export interface HandoffExplanation {
+  readonly reason: HandoffReason;
+  readonly summary: string;
+}
+
 export type HandoffTimelineFrame<
   Observation extends HandoffObservation = HandoffObservation,
 > = Omit<Observation, keyof HandoffPolicy | "phase">
@@ -81,3 +96,5 @@ export function runHandoffTimeline<
   observations: readonly Observation[],
   options?: HandoffOptions,
 ): Array<HandoffTimelineFrame<Observation>>;
+
+export function explainHandoff(result: HandoffResult): HandoffExplanation;
