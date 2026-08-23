@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   advanceHandoff,
   createHandoffState,
+  explainHandoff,
   runHandoffTimeline,
 } from "../src/index.js";
 
@@ -459,6 +460,123 @@ test("maintains policy invariants across a deterministic noisy timeline", () => 
     previousProgress = result.policy.nextOpacity;
     active ||= result.state.phase === "active";
   }
+});
+
+test("explains each handoff decision with a stable reason code", () => {
+  const reasonOf = (previousState, frame, options) =>
+    explainHandoff(advanceHandoff(previousState, frame, options)).reason;
+
+  // not-requested: an idle result with no active handoff.
+  assert.equal(
+    reasonOf(createHandoffState(), observation(0, { requested: false })),
+    "not-requested",
+  );
+
+  // holding-for-quality: requested, but the next representation is not ready.
+  assert.equal(
+    reasonOf(null, observation(0, { nextPresent: false })),
+    "holding-for-quality",
+  );
+
+  // revealing and revealing-paused: progress underway, then a readiness dip.
+  const revealOptions = { stableForMs: 0, revealDurationMs: 100 };
+  let result = advanceHandoff(null, observation(0), revealOptions);
+  result = advanceHandoff(result.state, observation(50), revealOptions);
+  assert.equal(explainHandoff(result).reason, "revealing");
+  result = advanceHandoff(
+    result.state,
+    observation(60, { coverage: 0.4 }),
+    revealOptions,
+  );
+  assert.equal(explainHandoff(result).reason, "revealing-paused");
+
+  // degraded-no-fallback: nothing to hold behind, revealed immediately.
+  assert.equal(
+    reasonOf(
+      null,
+      observation(0, {
+        previousAvailable: false,
+        coverage: 0.4,
+        loadProgress: 0.4,
+      }),
+      { stableForMs: 100, revealDurationMs: 300 },
+    ),
+    "degraded-no-fallback",
+  );
+
+  // degraded-after-timeout: revealed without confirmed quality on timeout.
+  const timeoutOptions = {
+    stableForMs: 0,
+    revealTimeoutMs: 2_000,
+    revealDurationMs: 100,
+    maximumFrameDeltaMs: 500,
+  };
+  let timedOut = advanceHandoff(
+    null,
+    observation(0, { coverage: 0.4 }),
+    timeoutOptions,
+  );
+  timedOut = advanceHandoff(
+    timedOut.state,
+    observation(2_500, { coverage: 0.4 }),
+    timeoutOptions,
+  );
+  assert.equal(explainHandoff(timedOut).reason, "degraded-after-timeout");
+
+  // retired-stable: a clean, confirmed completion.
+  assert.equal(
+    reasonOf(null, observation(0), { stableForMs: 0, revealDurationMs: 0 }),
+    "retired-stable",
+  );
+
+  // retired-degraded: completion allowed after a degraded retirement timeout.
+  const degradedRetirement = {
+    stableForMs: 0,
+    revealTimeoutMs: 100,
+    revealDurationMs: 0,
+    allowDegradedRetirement: true,
+    retirementTimeoutMs: 200,
+  };
+  let retired = advanceHandoff(
+    null,
+    observation(0, { coverage: 0.4 }),
+    degradedRetirement,
+  );
+  retired = advanceHandoff(
+    retired.state,
+    observation(200, { coverage: 0.4 }),
+    degradedRetirement,
+  );
+  const explained = explainHandoff(retired);
+  assert.equal(explained.reason, "retired-degraded");
+  assert.equal(typeof explained.summary, "string");
+  assert.ok(explained.summary.length > 0);
+});
+
+test("validates handoff results before explaining them", () => {
+  for (const [result, expected] of [
+    [null, /handoff result must be an object/],
+    [[], /handoff result must be an object/],
+    [{ policy: {} }, /handoff result state must be an object/],
+    [{ state: {}, policy: {} }, /state\.phase is invalid/],
+    [{ state: { phase: "waiting" }, policy: {} }, /state\.phase is invalid/],
+  ]) {
+    assert.throws(() => explainHandoff(result), expected);
+  }
+});
+
+test("does not mutate the result it explains", () => {
+  const result = freeze(
+    advanceHandoff(null, observation(0), {
+      stableForMs: 0,
+      revealDurationMs: 0,
+    }),
+  );
+
+  const explanation = explainHandoff(result);
+
+  assert.deepEqual(Object.keys(explanation), ["reason", "summary"]);
+  assert.equal(explanation.reason, "retired-stable");
 });
 
 test("preserves observation data in timeline output and validates the list", () => {

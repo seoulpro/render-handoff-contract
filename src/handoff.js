@@ -453,3 +453,64 @@ export const runHandoffTimeline = (observations, options) => {
     return { ...observation, ...result.policy, phase: state.phase };
   });
 };
+
+const HANDOFF_SUMMARIES = Object.freeze({
+  "not-requested":
+    "No handoff is requested; the previous representation is shown when "
+    + "available.",
+  "holding-for-quality":
+    "Holding the previous representation until the next one is present and "
+    + "stable.",
+  "revealing":
+    "Revealing the next representation while quality stays stable.",
+  "revealing-paused":
+    "Reveal paused after a readiness dip; the progress reached so far is held.",
+  "degraded-after-timeout":
+    "Revealing without confirmed quality because the reveal timed out.",
+  "degraded-no-fallback":
+    "Revealing immediately because no previous representation was available.",
+  "retired-degraded":
+    "Handoff complete; the previous representation was retired without "
+    + "confirmed quality.",
+  "retired-stable":
+    "Handoff complete; the next representation reached stable quality.",
+});
+
+const reasonForState = (state) => {
+  switch (state.phase) {
+    case "idle":
+      return "not-requested";
+    case "holding":
+      return "holding-for-quality";
+    case "revealing":
+      return state.readySinceMs === null ? "revealing-paused" : "revealing";
+    case "degraded-reveal":
+      return state.timedOut
+        ? "degraded-after-timeout"
+        : "degraded-no-fallback";
+    case "active":
+      return state.degraded ? "retired-degraded" : "retired-stable";
+    default:
+      throw new TypeError("handoff result state.phase is invalid");
+  }
+};
+
+/**
+ * Explain one handoff decision.
+ *
+ * Turns the `{ state, policy }` result of `advanceHandoff` into a stable reason
+ * code and a short human summary, so a trace, dashboard, or log can record why
+ * a frame revealed, held, paused, or degraded. It reads the result only and
+ * inspects no renderer, so it composes over any adapter's observations.
+ */
+export const explainHandoff = (result) => {
+  assertObject(result, "handoff result");
+  const { state, policy } = result;
+  assertObject(state, "handoff result state");
+  assertObject(policy, "handoff result policy");
+  if (!PHASES.has(state.phase)) {
+    throw new TypeError("handoff result state.phase is invalid");
+  }
+  const reason = reasonForState(state);
+  return { reason, summary: HANDOFF_SUMMARIES[reason] };
+};
