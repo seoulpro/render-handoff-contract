@@ -2,7 +2,7 @@
   "name": "render-handoff-contract",
   "version": "0.1.0",
   "description": "Engine-neutral policies and timeline audits for visually continuous renderer handoffs.",
-  "author": "seoulpro <lim@limsumin.com>",
+  "author": "Sumin Lim <lim@limsumin.com> (https://limsumin.com)",
   "license": "MIT",
   "homepage": "https://github.com/seoulpro/render-handoff-contract#readme",
   "repository": {
